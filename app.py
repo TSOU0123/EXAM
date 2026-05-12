@@ -73,10 +73,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)            
 
+if 'uploader_key' not in st.session_state: st.session_state.uploader_key = 0
+if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
+if 'flipped' not in st.session_state: st.session_state.flipped = False
+
+# 新增控制狀態
+if 'show_help_dialog' not in st.session_state:
+    st.session_state.show_help_dialog = False
+if 'tutorial_auto_triggered' not in st.session_state:
+    st.session_state.tutorial_auto_triggered = False
 
 @st.dialog("🚀 歡迎使用國考字卡練習")
 def show_tutorial():
-    # 必須確保文字是被包在三個引號 st.markdown(""" ... """) 裡面
     st.markdown("""
     這是一個專為國考設計的自動化刷題工具，幫助你快速練習考古題！
     
@@ -95,28 +103,10 @@ def show_tutorial():
     """)
     
     if st.button("開始練習！", width='stretch', type="primary"):
-        st.session_state.tutorial_shown = True
-        st.rerun()    
-
-
-
-# --- app.py 修改後的初始化區塊 ---
-
-if 'uploader_key' not in st.session_state:
-    st.session_state.uploader_key = 0
-if 'current_idx' not in st.session_state:
-    st.session_state.current_idx = 0
-if 'flipped' not in st.session_state:
-    st.session_state.flipped = False
-    
-# --- 新增：教學視窗顯示邏輯 ---
-if 'tutorial_shown' not in st.session_state:
-    # 如果 questions.json 不存在，代表是全新使用者，強制顯示教學
-    # 如果已存在題庫，則預設不打擾使用者
-    st.session_state.tutorial_shown = os.path.exists("questions.json")
-
-if not st.session_state.tutorial_shown:
-    show_tutorial()
+        # 修正這裡的變數名稱，確保與外部一致
+        st.session_state.show_help_dialog = False 
+        st.session_state.tutorial_auto_triggered = True
+        st.rerun()
 
 # --- 2. 資料處理函數 ---
 def load_data(filepath="questions.json"):
@@ -172,7 +162,31 @@ if 'data' not in st.session_state:
     st.session_state.data = load_data()
 
 # 抓取目前的題庫清單
+# --- app.py 載入資料後的邏輯區塊 ---
+
+# 取得目前是否有題庫
 series_names = list(st.session_state.data.get("decks", {}).keys())
+
+# --- 1. 頁面頂部標題與幫助按鈕 ---
+col_head_title, col_help_btn = st.columns([9, 1])
+with col_head_title:
+    st.title("🗂️ 國考字卡練習")
+with col_help_btn:
+    if st.button("❓", help="點擊查看教學"):
+        st.session_state.show_help_dialog = True
+
+# --- 2. 自動教學觸發判斷 (針對新使用者/空題庫) ---
+series_names = list(st.session_state.data.get("decks", {}).keys())
+
+# 如果沒題庫，且這一次開啟網頁還沒自動跳過教學，就設為 True
+if not series_names and not st.session_state.tutorial_auto_triggered:
+    st.session_state.show_help_dialog = True
+    st.session_state.tutorial_auto_triggered = True 
+
+# --- 3. 【核心修正】全程式唯一一個呼叫對話框的地方 ---
+if st.session_state.show_help_dialog:
+    show_tutorial()
+    
 active_series = st.session_state.data.get("active")
 
 # 決定目前要顯示的題目與 Metadata
@@ -188,12 +202,9 @@ else:
     questions = []
     metadata = {"deck_name": "🗂️ 尚未載入題庫"}
 
-# --- 4. 主要 UI 顯示區域 ---
-
-# 檢查是否有題目
+# --- 修正後 ---
 if not questions:
-    st.title("🗂️ 國考字卡練習")
-    st.warning("⚠️ 目前題庫是空的！請點擊下方的「題庫管理」展開並匯入 PDF 檔案。")
+    st.warning("⚠️ 目前題庫是空的！請點擊下方的「題庫管理與檔案匯入」展開並匯入 PDF 檔案。")
 else:
 # 🎯 標題
     st.subheader(metadata.get("deck_name", "字卡練習"))
