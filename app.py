@@ -1,3 +1,4 @@
+# --- 建議修改後的開頭順序 ---
 import streamlit as st
 import json
 import os
@@ -5,20 +6,19 @@ import re
 import tempfile
 import exam
 
-# --- 1. 初始化 Session 唯一 ID ---
-if 'user_id' not in st.session_state:
-    # 產生一個隨機 ID
-    st.session_state.user_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
-
-# 定義該使用者的專屬路徑
-USER_JSON = f"questions_{st.session_state.user_id}.json"
-USER_IMG_DIR = f"images_{st.session_state.user_id}"
-
+# 先設定頁面，再進行邏輯運算
 st.set_page_config(
     page_title="國考字卡練習", 
-    layout="centered",      # 手機瀏覽建議用 centered，寬度較集中
+    layout="centered", 
     initial_sidebar_state="collapsed"
 )
+
+# 1. 初始化 Session 唯一 ID
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
+
+USER_JSON = f"questions_{st.session_state.user_id}.json"
+USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
 
 # --- app.py 中的 CSS 修正 ---
@@ -437,16 +437,16 @@ with st.expander("🛠️ 題庫管理與檔案匯入"):
             col_yes, col_no = st.columns(2)
             
             with col_yes:
+                # --- 4. 修改清除邏輯 ---
                 if st.button("🔥 確定，全部刪除", type="primary", width='stretch'):
-                    # 1. 物理刪除檔案與圖片資料夾
-                    if os.path.exists("questions.json"):
-                        os.remove("questions.json")
+                    # 僅刪除該 Session 的檔案與資料夾
+                    if os.path.exists(USER_JSON):
+                        os.remove(USER_JSON)
                     
-                    if os.path.exists("images"):
+                    if os.path.exists(USER_IMG_DIR):
                         import shutil
-                        shutil.rmtree("images")
+                        shutil.rmtree(USER_IMG_DIR)
                     
-                    # 2. 重置記憶體中的資料
                     st.session_state.data = {"decks": {}, "active": None}
                     st.session_state.current_idx = 0
                     st.session_state.flipped = False
