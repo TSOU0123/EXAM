@@ -371,3 +371,16 @@ with st.expander("🛠️ 題庫管理與檔案匯入"):
                 if st.button("❌ 取消", width='stretch'):
                     st.session_state.confirm_clear_all = False
                     st.rerun()
+
+st.write("") # 留空行
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; padding-bottom: 20px;'>
+        <a href='https://www.tsoutest0123.com/' target='_blank' style='color: #888; text-decoration: none; font-size: 13px; font-weight: 500;'>
+             www.tsoutest0123.com
+        </a>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
