@@ -70,6 +70,33 @@ st.markdown("""
             padding: 2px 4px;
             border-radius: 4px;
         }
+    .top-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+
+/* 針對手機版縮小標題字體，並讓問號按鈕圓形置中且與標題等高 */
+    @media (max-width: 600px) {
+        .mobile-title {
+            font-size: 1.8rem !important; /* 調整標題大小 */
+            margin: 0 !important;
+            line-height: 2.5rem !important; /* 鎖定行高，用於對齊按鈕 */
+            white-space: nowrap;
+        }
+        /* 🎯 問號按鈕：正圓形、垂直水平置中 🎯 */
+        div.stButton > button:has(div:contains("❓")) {
+            width: 2.5rem !important; /* 寬度與標題行高一致 */
+            height: 2.5rem !important; /* 高度與標題行高一致 */
+            border-radius: 50% !important; /* 強制圓形 */
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            min-width: 2.5rem !important;
+        }
+    }
     </style>
 """, unsafe_allow_html=True)            
 
@@ -97,9 +124,9 @@ def show_tutorial():
     4. **快速跳轉**：直接輸入題號並點擊 **跳轉**。
     5. **卡片清單**：可以看到目前有的字卡，並切換想刷的題目。
                 
-    **因目前沒錢買伺服器，試題可能過一段時間後會自己消失，重傳就好ㄌ，請多擔待**           
+    **目前沒錢買伺服器，試題可能過一段時間後會自己消失，重傳就好ㄌ!(也歡迎贊助我喔)**           
     
-    *祝 金榜題名！*
+    **祝 金榜題名！**
     """)
     
     if st.button("開始練習！", width='stretch', type="primary"):
@@ -167,10 +194,14 @@ if 'data' not in st.session_state:
 # 取得目前是否有題庫
 series_names = list(st.session_state.data.get("decks", {}).keys())
 
-# --- 1. 頁面頂部標題與幫助按鈕 ---
-col_head_title, col_help_btn = st.columns([9, 1])
+
+# 使用 [7.5, 2.5] 比例，讓加大的標題有足夠空間，同時按鈕不跑位
+col_head_title, col_help_btn = st.columns([8.5, 1.5])
+
 with col_head_title:
-    st.title("🗂️ 國考字卡練習")
+    # 使用 h2 配合自定義 CSS 類別
+    st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
+
 with col_help_btn:
     if st.button("❓", help="點擊查看教學"):
         st.session_state.show_help_dialog = True
