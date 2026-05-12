@@ -71,15 +71,52 @@ st.markdown("""
             border-radius: 4px;
         }
     </style>
-""", unsafe_allow_html=True)
+""", unsafe_allow_html=True)            
 
-# --- 1. 初始化 Session State ---
+
+@st.dialog("🚀 歡迎使用國考字卡練習")
+def show_tutorial():
+    # 必須確保文字是被包在三個引號 st.markdown(""" ... """) 裡面
+    st.markdown("""
+    這是一個專為國考設計的自動化刷題工具，幫助你快速練習考古題！
+    
+    ### 📖 快速上手指南
+    1. **匯入題庫**：展開最下方的**題庫管理**，同時選取並上傳題目與答案 PDF。
+    2. **更正答案**：系統會自動抓取答案，若有 同時有**答案**及**更正答案** ，會優先採用**更正答案**。
+    3. **操作方式**：
+        - 點擊 **🔄 解答**：查看正確答案、備註以及選項對照。
+        - 點擊 **⬅️/➡️**：切換上下題。
+    4. **快速跳轉**：直接輸入題號並點擊 **跳轉**。
+    5. **卡片清單**：可以看到目前有的字卡，並切換想刷的題目。
+                
+    **因目前沒錢買伺服器，試題可能過一段時間後會自己消失，重傳就好ㄌ，請多擔待**           
+    
+    *祝 金榜題名！*
+    """)
+    
+    if st.button("開始練習！", width='stretch', type="primary"):
+        st.session_state.tutorial_shown = True
+        st.rerun()    
+
+
+
+# --- app.py 修改後的初始化區塊 ---
+
 if 'uploader_key' not in st.session_state:
     st.session_state.uploader_key = 0
 if 'current_idx' not in st.session_state:
     st.session_state.current_idx = 0
 if 'flipped' not in st.session_state:
     st.session_state.flipped = False
+    
+# --- 新增：教學視窗顯示邏輯 ---
+if 'tutorial_shown' not in st.session_state:
+    # 如果 questions.json 不存在，代表是全新使用者，強制顯示教學
+    # 如果已存在題庫，則預設不打擾使用者
+    st.session_state.tutorial_shown = os.path.exists("questions.json")
+
+if not st.session_state.tutorial_shown:
+    show_tutorial()
 
 # --- 2. 資料處理函數 ---
 def load_data(filepath="questions.json"):
