@@ -5,7 +5,15 @@ import re
 import tempfile
 import exam
 
-# 設定網頁基本設定
+# --- 1. 初始化 Session 唯一 ID ---
+if 'user_id' not in st.session_state:
+    # 產生一個隨機 ID
+    st.session_state.user_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
+
+# 定義該使用者的專屬路徑
+USER_JSON = f"questions_{st.session_state.user_id}.json"
+USER_IMG_DIR = f"images_{st.session_state.user_id}"
+
 st.set_page_config(
     page_title="國考字卡練習", 
     layout="centered",      # 手機瀏覽建議用 centered，寬度較集中
@@ -135,8 +143,8 @@ def show_tutorial():
         st.session_state.tutorial_auto_triggered = True
         st.rerun()
 
-# --- 2. 資料處理函數 ---
-def load_data(filepath="questions.json"):
+# --- 2. 修改資料處理函數 (約第 115 行) ---
+def load_data(filepath=USER_JSON): # 使用動態路徑
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -144,7 +152,7 @@ def load_data(filepath="questions.json"):
             return data
     return {"decks": {}, "active": None}
 
-def save_data(data, filepath="questions.json"):
+def save_data(data, filepath=USER_JSON): # 使用動態路徑
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -339,15 +347,16 @@ with st.expander("🛠️ 題庫管理與檔案匯入"):
         key=f"uploader_{st.session_state.uploader_key}"
     )
 
-    if uploaded_files:
-        if st.button("🚀 開始分類匯入", type="primary", width='stretch'):
+        # --- 3. 修改解析邏輯中的資料夾路徑 ---
+    if st.button("🚀 開始分類匯入", type="primary", width='stretch'):
             saved_paths = save_uploaded_files(uploaded_files)
             file_pairs = exam.find_all_pairs(saved_paths)
 
             for question_pdf, answer_pdf in file_pairs:
                 deck_id = os.path.basename(question_pdf)
                 with st.spinner(f"正在解析 {deck_id} ..."):
-                    img_map = exam.get_pdf_images(question_pdf, output_dir="images")
+                    # 核心修正：路徑改為 USER_IMG_DIR
+                    img_map = exam.get_pdf_images(question_pdf, output_dir=USER_IMG_DIR)
                     raw_qs, m_data = exam.extract_exam_data(question_pdf)
                     ans_list, remarks_map = exam.parse_answer_pdf(answer_pdf) if answer_pdf else ([], {})
 
