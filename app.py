@@ -79,14 +79,21 @@ if isinstance(js_id, str):
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-# 第三階段：載入資料 (只有在 user_id 不是 loading 狀態時才載入重資源，節省效能)
-if 'data' not in st.session_state and not st.session_state.user_id.startswith("loading_"):
-    if os.path.exists(USER_JSON):
-        with open(USER_JSON, "r", encoding="utf-8") as f:
-            d = json.load(f)
-            st.session_state.data = d if isinstance(d, dict) and "decks" in d else {"decks": {}, "active": None}
-    else:
-        st.session_state.data = {"decks": {}, "active": None}  
+# 第三階段：載入資料 (修正版：確保 data 隨時存在防止崩潰)
+if 'data' not in st.session_state:
+    # 預設空結構，防止後方程式碼 AttributeError
+    st.session_state.data = {"decks": {}, "active": None}
+    
+    # 只有當 ID 確定不是 loading 狀態，才去讀取真正的檔案
+    if not st.session_state.user_id.startswith("loading_"):
+        if os.path.exists(USER_JSON):
+            try:
+                with open(USER_JSON, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    if isinstance(d, dict) and "decks" in d:
+                        st.session_state.data = d
+            except:
+                pass
 
 if 'uploader_key' not in st.session_state: st.session_state.uploader_key = 0
 if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
@@ -173,21 +180,15 @@ def save_uploaded_files(uploaded_files):
         saved_paths.append(safe_path)
     return saved_paths
 
-# 取得目前是否有題庫
+# --- 取得題庫清單 (安全讀取) ---
 series_names = list(st.session_state.data.get("decks", {}).keys())
 
-
-# --- 2. 自動教學觸發判斷 (針對新使用者/空題庫) ---
-series_names = list(st.session_state.data.get("decks", {}).keys())
-
-# 如果沒題庫，且這一次開啟網頁還沒自動跳過教學，就設為 True
+# 自動教學觸發判斷 (針對新使用者/空題庫)
 if not series_names and not st.session_state.tutorial_auto_triggered:
-    st.session_state.show_help_dialog = True
-    st.session_state.tutorial_auto_triggered = True 
-
-# --- 3. 【核心修正】全程式唯一一個呼叫對話框的地方 ---
-if st.session_state.show_help_dialog:
-    show_tutorial()
+    # 只有當 ID 已經校正完畢（非 loading）且真的沒題庫時才自動跳教學
+    if not st.session_state.user_id.startswith("loading_"):
+        st.session_state.show_help_dialog = True
+        st.session_state.tutorial_auto_triggered = True
     
 active_series = st.session_state.data.get("active")
 
@@ -207,9 +208,9 @@ else:
 # --- 修正後 ---
 if not questions:
     st.warning("⚠️ 目前題庫是空的！請點擊下方的「題庫管理與檔案匯入」展開並匯入 PDF 檔案。")
-else:
-# 🎯 標題
-    st.subheader(metadata.get("deck_name", "字卡練習"))
+# 🎯 標題 (只有在有題庫時才顯示子標題，避免重複)
+    if series_names:
+        st.subheader(metadata.get("deck_name", "字卡練習"))
     
     # 📱 調整比例：進度佔 2.2，輸入框佔 1，按鈕佔 0.8
     # 這樣的「不等寬」設計最符合手機窄螢幕
