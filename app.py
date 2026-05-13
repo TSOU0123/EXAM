@@ -7,25 +7,28 @@ import tempfile
 import exam
 
 
-# --- 1. 初始化持久化 User ID (與瀏覽器綁定) ---
+# --- 1. 初始化持久化 User ID (修正版：確保不連通且持久化) ---
 
-# 從瀏覽器的 localStorage 讀取 user_id
-# 如果是第一次使用，這個值會是 None
+# 執行 JS 取得瀏覽器存儲的 ID
+# 注意：第一次載入頁面時，stored_id 會是 None
 stored_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
 if 'user_id' not in st.session_state:
-    # 這裡加入一個小延遲確保 JavaScript 執行完成
-    if stored_id is None or stored_id == "":
-        # 如果瀏覽器沒存過，才產生新的
+    if stored_id is not None and stored_id != "":
+        # A. 如果瀏覽器有舊 ID，就抓回來
+        st.session_state.user_id = stored_id
+    elif stored_id is None:
+        # B. 如果 JS 還沒回傳（正在載入中），先給一個暫時狀態，避免執行後續邏輯
+        st.stop() 
+    else:
+        # C. 如果瀏覽器確定沒存過 ID (空字串)，才產生新的
         new_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
         st.session_state.user_id = new_id
-        # 將新 ID 存入瀏覽器 localStorage
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
-    else:
-        # 如果瀏覽器有存過，就拿回來用
-        st.session_state.user_id = stored_id
 
-# 確保路徑與當前 ID 綁定
+# ⚠️ 務必確認：刪除原先第 41~45 行那段重複的「1. 初始化 Session 唯一 ID」！
+
+# 確保路徑與當前唯一 ID 綁定
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
@@ -166,17 +169,18 @@ def show_tutorial():
         st.session_state.tutorial_auto_triggered = True
         st.rerun()
 
-# --- 2. 修改資料處理函數 (約第 115 行) ---
-def load_data(filepath=USER_JSON): # 使用動態路徑
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
+# --- 2. 修改資料處理函數 ---
+def load_data(): 
+    # 直接在函式內使用全域的 USER_JSON
+    if os.path.exists(USER_JSON):
+        with open(USER_JSON, "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict) and "decks" in data:
             return data
     return {"decks": {}, "active": None}
 
-def save_data(data, filepath=USER_JSON): # 使用動態路徑
-    with open(filepath, "w", encoding="utf-8") as f:
+def save_data(data): 
+    with open(USER_JSON, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def build_series_name(metadata, question_path, existing_decks):
