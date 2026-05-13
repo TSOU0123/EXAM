@@ -45,34 +45,48 @@ with col_help_btn:
     if st.button("❓", help="點擊查看教學"):
         st.session_state.show_help_dialog = True
 
-# --- 3. 核心：強制對接瀏覽器 ID (解決重整消失問題) ---
+# --- 3. 核心：唯一 ID 初始化 (自動對接版：解決卡死與重整消失) ---
+
+# 嘗試從瀏覽器讀取舊 ID
 js_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
-# 如果 JS 還在跑 (回傳不是字串)，就停在這裡只顯示標題
-if not isinstance(js_id, str):
-    st.stop()
-
-# 走到這代表已經拿到瀏覽器的結果
+# 第一階段：確保 Session 隨時都有 ID，防止程式卡死 (白畫面)
 if 'user_id' not in st.session_state:
-    if js_id not in ["null", ""]:
+    if isinstance(js_id, str) and js_id not in ["null", ""]:
+        # A. 如果 JS 跑得快，直接拿回舊 ID
         st.session_state.user_id = js_id
     else:
-        new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
-        st.session_state.user_id = new_id
-        st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
+        # B. JS 還沒好或新使用者，先隨機生一個「暫時標籤」，讓畫面先跑出來
+        st.session_state.user_id = "loading_" + re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
+
+# 第二階段：背景校正 (核心邏輯：在後台偷偷換回正確的 ID)
+if isinstance(js_id, str):
+    # 如果瀏覽器有舊 ID，且目前用的是暫時標籤，則自動切換並重整
+    if js_id not in ["null", ""] and st.session_state.user_id != js_id:
+        st.session_state.user_id = js_id
+        # 強制清除舊資料快取並重整
+        if 'data' in st.session_state: del st.session_state.data
+        st.rerun()
+    # 如果確定是新使用者 (JS 跑完且沒存過 ID)，將目前的暫時標籤「去標籤化」存入瀏覽器
+    elif js_id in ["null", ""] and st.session_state.user_id.startswith("loading_"):
+        clean_id = st.session_state.user_id.replace("loading_", "")
+        st.session_state.user_id = clean_id
+        st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
+        if 'data' in st.session_state: del st.session_state.data
         st.rerun()
 
-# 鎖定路徑並載入資料
+# 鎖定專屬路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-if 'data' not in st.session_state:
+# 第三階段：載入資料 (只有在 user_id 不是 loading 狀態時才載入重資源，節省效能)
+if 'data' not in st.session_state and not st.session_state.user_id.startswith("loading_"):
     if os.path.exists(USER_JSON):
         with open(USER_JSON, "r", encoding="utf-8") as f:
             d = json.load(f)
             st.session_state.data = d if isinstance(d, dict) and "decks" in d else {"decks": {}, "active": None}
     else:
-        st.session_state.data = {"decks": {}, "active": None}        
+        st.session_state.data = {"decks": {}, "active": None}  
 
 if 'uploader_key' not in st.session_state: st.session_state.uploader_key = 0
 if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
@@ -158,13 +172,6 @@ def save_uploaded_files(uploaded_files):
             f.write(uploaded.getbuffer())
         saved_paths.append(safe_path)
     return saved_paths
-
-# --- 3. 載入資料並決定當前題目 ---
-if 'data' not in st.session_state:
-    st.session_state.data = load_data()
-
-# 抓取目前的題庫清單
-# --- app.py 載入資料後的邏輯區塊 ---
 
 # 取得目前是否有題庫
 series_names = list(st.session_state.data.get("decks", {}).keys())
