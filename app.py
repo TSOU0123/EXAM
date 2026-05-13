@@ -14,34 +14,31 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. 唯一 ID 初始化 (確保瀏覽器獨立且持久) ---
+# --- app.py 開頭初始化修正 ---
+
 # 取得瀏覽器存儲的 ID
 stored_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
 if 'user_id' not in st.session_state:
     if stored_id is not None and stored_id != "":
-        # A. 成功從瀏覽器讀回舊 ID
+        # A. 成功讀回舊 ID
         st.session_state.user_id = stored_id
     elif stored_id is None:
-        # B. 等待 JavaScript 回傳，先停止執行後續代碼避免產生錯誤 ID
+        # B. 等待 JS 載入
         st.stop() 
     else:
-        # C. 確定是新使用者，產生唯一 ID 並存入瀏覽器
-        # 使用 os.urandom 確保隨機性，防止與他人連通
-        new_id = re.sub(r'\W+', '', str(os_lib.urandom(4).hex()))
+        # C. 新使用者，產生 12 位元隨機碼確保不重複
+        new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
         st.session_state.user_id = new_id
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
 
-# 鎖定該使用者的專屬檔案路徑
+# 鎖定專屬路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-# 先設定頁面，再進行邏輯運算
-st.set_page_config(
-    page_title="國考字卡練習", 
-    layout="centered", 
-    initial_sidebar_state="collapsed"
-)
+# 在側邊欄顯示目前 ID (方便測試時檢查是否有分開)
+with st.sidebar:
+    st.caption(f"🆔 目前使用者 ID: {st.session_state.user_id}")
 
 
 # --- app.py 中的 CSS 修正 ---
@@ -469,8 +466,11 @@ with st.expander("🛠️ 題庫管理與檔案匯入"):
                         import shutil
                         shutil.rmtree(USER_IMG_DIR)
                     
-                    # 2. 清除瀏覽器 localStorage 紀錄
+# 2. 清除瀏覽器 localStorage 紀錄
                     st_javascript("localStorage.removeItem('flashcard_user_id');")
+                    
+                    # 3. 清除 Session 狀態，強制下次重新生成 ID
+                    del st.session_state.user_id
                     
                     # 3. 重置狀態
                     st.session_state.data = {"decks": {}, "active": None}
