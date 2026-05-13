@@ -14,20 +14,23 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- app.py 開頭初始化修正 ---
 
 # 取得瀏覽器存儲的 ID
 stored_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
 if 'user_id' not in st.session_state:
-    if stored_id is not None and stored_id != "":
+    # 核心修正：streamlit-javascript 在執行中或失敗時常會回傳 0
+    # 我們必須將 0 視為「載入中」，讓程式暫停等待真正的值
+    if stored_id is None or stored_id == 0:
+        st.stop() 
+    
+    # 判斷是否成功讀取到有效的字串 ID
+    # 排除 JS 可能回傳的 "null" 字串或空值
+    if isinstance(stored_id, str) and stored_id != "" and stored_id != "null":
         # A. 成功讀回舊 ID
         st.session_state.user_id = stored_id
-    elif stored_id is None:
-        # B. 等待 JS 載入
-        st.stop() 
     else:
-        # C. 新使用者，產生 12 位元隨機碼確保不重複
+        # C. 確定是新使用者（回傳值為空），產生隨機 ID 並存入瀏覽器
         new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
         st.session_state.user_id = new_id
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
