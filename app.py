@@ -205,98 +205,71 @@ else:
     questions = []
     metadata = {"deck_name": "🗂️ 尚未載入題庫"}
 
-# --- 修正後 ---
+# --- 修正版：加入空題庫與索引安全保護 ---
 if not questions:
     st.warning("⚠️ 目前題庫是空的！請點擊下方的「題庫管理與檔案匯入」展開並匯入 PDF 檔案。")
-# 🎯 標題 (只有在有題庫時才顯示子標題，避免重複)
+else:
+    # 🎯 標題
     if series_names:
         st.subheader(metadata.get("deck_name", "字卡練習"))
     
-    # 📱 調整比例：進度佔 2.2，輸入框佔 1，按鈕佔 0.8
-    # 這樣的「不等寬」設計最符合手機窄螢幕
+    # 安全索引檢查：防止切換題庫時索引溢出
+    if st.session_state.current_idx >= len(questions):
+        st.session_state.current_idx = 0
+
+    # 📱 控制列：進度、跳轉
     col_info, col_jump_input, col_jump_btn = st.columns([2.2, 1, 0.8])
-    
     with col_info:
         st.write(f"進度: **{st.session_state.current_idx + 1}/{len(questions)}**")
-        
     with col_jump_input:
         q_target = st.text_input("跳轉", placeholder="題號", label_visibility="collapsed", key="jump_input")
-        
     with col_jump_btn:
-        if st.button("跳轉", width='stretch'):
-            # 1. 只有在框框「真的有輸入內容」時才執行判斷
-            if q_target.strip(): 
-                try:
-                    # 提取輸入字串中的純數字部分 (例如輸入 "05" 會變 "5")
-                    input_num = re.sub(r'\D', '', q_target) 
-                    
-                    if input_num:
-                        target_id = str(int(input_num))
-                        target_idx = next((i for i, q in enumerate(questions) if str(q["id"]) == target_id), None)
-                        
-                        if target_idx is not None:
-                            st.session_state.current_idx = target_idx
-                            st.session_state.flipped = False
-                            st.rerun()
-                        else:
-                            # 只有在「找不到該題號」時才提示
-                            st.toast(f"❌ 找不到題號：{target_id}", icon="⚠️")
-                    else:
-                        # 如果輸入了一堆字但裡面沒數字，才提示
-                        st.toast("⚠️ 請輸入有效數字", icon="ℹ️")
-                except:
-                    # 發生非預期錯誤時靜默處理，不干擾使用者
-                    pass
-            
-            # 2. 如果框框是空的 (if q_target.strip() 為 False)
-            # 點按鈕會直接不執行任何動作，也不會跳出「請輸入數字」的警告
+        if st.button("跳轉", width='stretch') and q_target.strip():
+            input_num = re.sub(r'\D', '', q_target) 
+            if input_num:
+                target_id = str(int(input_num))
+                target_idx = next((i for i, q in enumerate(questions) if str(q["id"]) == target_id), None)
+                if target_idx is not None:
+                    st.session_state.current_idx = target_idx
+                    st.session_state.flipped = False
+                    st.rerun()
 
-# --- 【快速刷題】控制按鈕 ---
+    # 🎮 快速刷題按鈕
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         if st.button("⬅️ 上題", width='stretch') and st.session_state.current_idx > 0:
             st.session_state.current_idx -= 1
             st.session_state.flipped = False
             st.rerun()
-            
     with col2:
         if st.button("🔄 解答", type="primary", width='stretch'):
             st.session_state.flipped = not st.session_state.flipped
             st.rerun()
-            
     with col3:
         if st.button("下題 ➡️", width='stretch') and st.session_state.current_idx < len(questions) - 1:
             st.session_state.current_idx += 1
             st.session_state.flipped = False
             st.rerun()
 
-# --- 字卡內容區域 ---
+    # 🃏 字卡內容 (放在 if questions 內確保安全)
     with st.container(border=True):
         q = questions[st.session_state.current_idx]
         if not st.session_state.flipped:
-            # 📄 正面：題目
             st.markdown(f"**Q{q['id']}**")
             st.write(q['text'])
             if "image" in q and os.path.exists(q['image']):
-                st.image(q['image'], width='stretch')
+                st.image(q['image'], use_container_width=True)
             for key, val in q['options'].items():
                 if val: st.write(f"({key}) {val}")
         else:
-            # 💡 背面：答案與選項對照
             st.markdown("✅ **正確答案**")
-            
-            # --- 核心修正：動態字體大小 ---
             ans_val = q['answer']
-            if len(ans_val) <= 5: # 如果是單一字母 (如 A, B, C, D)
+            if len(ans_val) <= 5:
                 st.markdown(f"<h2 style='text-align: center; color: #ff4b4b; margin: 10px 0;'>{ans_val}</h2>", unsafe_allow_html=True)
-            else: # 如果是長篇備註 (如：答A、C給分)
+            else:
                 st.markdown(f"<div style='color: #ff4b4b; font-size: 16px; font-weight: bold; border-left: 4px solid #ff4b4b; padding-left: 10px; margin: 10px 0;'>{ans_val}</div>", unsafe_allow_html=True)
-            
-            # --- 核心修正：背面也顯示選項內容 ---
             st.markdown("---")
             for key, val in q['options'].items():
-                # 如果該選項是正確答案，將文字標紅加粗方便一眼辨識
                 if key in ans_val and len(ans_val) < 5:
                     st.markdown(f"**<span style='color: #ff4b4b;'>({key}) {val}</span>**", unsafe_allow_html=True)
                 else:
