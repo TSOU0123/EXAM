@@ -30,18 +30,26 @@ if 'user_id' not in st.session_state:
         st.session_state.user_id = "user_" + re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
 
 # 第二階段：背景校正 (核心邏輯)
-# 如果 JS 之後抓到了真正的瀏覽器 ID，且跟目前的臨時 ID 不同，則自動切換並存檔
 if isinstance(js_id, str) and js_id not in ["null", ""]:
     if st.session_state.user_id != js_id:
+        # 🎯 關鍵修正 1：當 ID 被校正時，強制刪除舊的 data 快取
+        if 'data' in st.session_state:
+            del st.session_state.data
+        
         st.session_state.user_id = js_id
-        st.rerun() # 靜默重整，讀回舊資料
-elif isinstance(js_id, str) and js_id in ["null", ""]:
-    # 如果確定是新使用者 (JS 已經跑完且說沒存過)，就將目前臨時 ID 存入瀏覽器
-    # 移除 temp 前綴讓 ID 更乾淨
-    clean_id = st.session_state.user_id.replace("user_", "")
-    st.session_state.user_id = clean_id
-    st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
+        st.rerun() # 靜默重整，讓程式重新載入正確 ID 的資料
 
+elif isinstance(js_id, str) and js_id in ["null", ""]:
+    # 新使用者邏輯優化
+    clean_id = st.session_state.user_id.replace("user_", "")
+    if st.session_state.user_id != clean_id:
+        st.session_state.user_id = clean_id
+        st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
+        
+        # 🎯 關鍵修正 2：確保新使用者路徑立即生效
+        if 'data' in st.session_state:
+            del st.session_state.data
+        st.rerun()
 # 鎖定專屬路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
