@@ -15,37 +15,36 @@ st.set_page_config(
 )
 
 
-# --- app.py 開頭初始化修正 (解決白畫面問題) ---
+# --- 2. 唯一 ID 初始化 (精準攔截版) ---
 
-# 取得瀏覽器存儲的 ID
+# 執行 JS 取得瀏覽器存儲的 ID
 stored_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
 if 'user_id' not in st.session_state:
-    # 1. 只有當 stored_id 為 0 時，才代表 JS 還在讀取，此時才需要停止等待
-    if stored_id == 0:
-        st.stop() 
+    # 關鍵：只要不是「字串」，就代表 JavaScript 還在跑，必須等待
+    if not isinstance(stored_id, str):
+        st.info("🔍 正在初始化個人空間，請稍候...")
+        st.stop()
     
-    # 2. 如果 stored_id 是 None 或 "null"，代表是【新使用者】
-    if stored_id is None or stored_id == "null":
-        # 產生唯一 ID 並存入瀏覽器
+    # 到這裡，stored_id 必定是字串 (可能是 "null", "", 或真正的 ID)
+    if stored_id == "null" or stored_id == "":
+        # A. 確定是新使用者：產生 ID 並存入瀏覽器
         new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
         st.session_state.user_id = new_id
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
-    
-    # 3. 如果是字串，代表是【舊使用者】，直接拿回來用
-    elif isinstance(stored_id, str) and stored_id != "":
-        st.session_state.user_id = stored_id
-    
-    # 4. 如果不幸還是沒抓到，給一個保險 (通常不會發生)
+        # 強制重整一次，確保 USER_JSON 路徑正確更新
+        st.rerun()
     else:
-        st.stop()
+        # B. 確定是回頭客：直接使用瀏覽器存好的 ID
+        st.session_state.user_id = stored_id
 
-# 鎖定專屬路徑 (此時 session_state.user_id 必定已經存在)
+# 鎖定專屬路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
-# 在側邊欄顯示目前 ID (方便測試時檢查是否有分開)
+
+# 在側邊欄顯示目前 ID，方便你檢查 (測試完可以刪掉)
 with st.sidebar:
-    st.caption(f"🆔 目前使用者 ID: {st.session_state.user_id}")
+    st.caption(f"🆔 目前連線 ID: {st.session_state.user_id}")
 
 
 # --- app.py 中的 CSS 修正 ---
