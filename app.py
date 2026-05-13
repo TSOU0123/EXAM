@@ -15,34 +15,40 @@ st.set_page_config(
 )
 
 
-# --- 2. 唯一 ID 初始化 (精簡直接版) ---
+# --- 2. 唯一 ID 初始化 (背景同步版：直接進入、不留白、不連通) ---
 
-# 執行 JS 取得瀏覽器存儲的 ID
-js_result = st_javascript("localStorage.getItem('flashcard_user_id');")
+# 嘗試抓取瀏覽器存儲的 ID
+js_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
+# 第一階段：確保 Session 中隨時都有一個可用 ID
 if 'user_id' not in st.session_state:
-    # 關鍵：只要 JavaScript 還沒回傳字串結果 (0 或 None)，就安靜等待，不顯示任何 UI
-    if not isinstance(js_result, str):
-        st.stop()
-    
-    # 判斷是回頭客還是新使用者
-    if js_result not in ["null", ""]:
-        # A. 成功讀回舊 ID
-        st.session_state.user_id = js_result
+    if isinstance(js_id, str) and js_id not in ["null", ""]:
+        # A. 如果 JS 剛好跑得快，直接拿回舊 ID
+        st.session_state.user_id = js_id
     else:
-        # B. 確定是新使用者：產生 ID、存入瀏覽器、立即進入
-        new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
-        st.session_state.user_id = new_id
-        st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
-        st.rerun()
+        # B. JS 還沒好或沒存過，先隨機生一個，確保畫面不白屏
+        st.session_state.user_id = "user_" + re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
+
+# 第二階段：背景校正 (核心邏輯)
+# 如果 JS 之後抓到了真正的瀏覽器 ID，且跟目前的臨時 ID 不同，則自動切換並存檔
+if isinstance(js_id, str) and js_id not in ["null", ""]:
+    if st.session_state.user_id != js_id:
+        st.session_state.user_id = js_id
+        st.rerun() # 靜默重整，讀回舊資料
+elif isinstance(js_id, str) and js_id in ["null", ""]:
+    # 如果確定是新使用者 (JS 已經跑完且說沒存過)，就將目前臨時 ID 存入瀏覽器
+    # 移除 temp 前綴讓 ID 更乾淨
+    clean_id = st.session_state.user_id.replace("user_", "")
+    st.session_state.user_id = clean_id
+    st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
 
 # 鎖定專屬路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-# 在側邊欄顯示目前狀態
+# 在側邊欄顯示 ID (方便測試，完工後可整段刪除)
 with st.sidebar:
-    st.caption(f"🆔 當前 ID: {st.session_state.user_id}")
+    st.caption(f"🆔 目前 ID: {st.session_state.user_id}")
 
 
 # --- app.py 中的 CSS 修正 ---
