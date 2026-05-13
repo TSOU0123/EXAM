@@ -46,10 +46,6 @@ elif isinstance(js_id, str) and js_id in ["null", ""]:
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-# 在側邊欄顯示 ID (方便測試，完工後可整段刪除)
-with st.sidebar:
-    st.caption(f"🆔 目前 ID: {st.session_state.user_id}")
-
 
 # --- app.py 中的 CSS 修正 ---
 st.markdown("""
