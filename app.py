@@ -15,33 +15,24 @@ st.set_page_config(
 )
 
 
-# --- 2. 唯一 ID 初始化 (防卡死強化版) ---
+# --- 2. 唯一 ID 初始化 (精簡直接版) ---
 
 # 執行 JS 取得瀏覽器存儲的 ID
 js_result = st_javascript("localStorage.getItem('flashcard_user_id');")
 
 if 'user_id' not in st.session_state:
-    # 情況 A：JavaScript 還在跑 (回傳 0)
-    if js_result == 0:
-        st.info("🔍 正在連接瀏覽器個人空間...")
-        
-        # 💡 防撞牆機制：如果等太久，提供手動進入按鈕
-        if st.button("連線逾時？點擊直接進入 (臨時模式)"):
-            # 產生一個暫時的隨機 ID，讓使用者能先用
-            st.session_state.user_id = "temp_" + re.sub(r'\W+', '', str(os_lib.urandom(4).hex()))
-            st.rerun()
+    # 關鍵：只要 JavaScript 還沒回傳字串結果 (0 或 None)，就安靜等待，不顯示任何 UI
+    if not isinstance(js_result, str):
         st.stop()
     
-    # 情況 B：成功拿回字串 ID (且不是 null)
-    if isinstance(js_result, str) and js_result not in ["null", ""]:
+    # 判斷是回頭客還是新使用者
+    if js_result not in ["null", ""]:
+        # A. 成功讀回舊 ID
         st.session_state.user_id = js_result
-    
-    # 情況 C：確定是新使用者 (回傳 None 或 "null")
     else:
-        # 產生 12 位元隨機 ID 確保不與他人連通 [cite: 1]
+        # B. 確定是新使用者：產生 ID、存入瀏覽器、立即進入
         new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
         st.session_state.user_id = new_id
-        # 嘗試存入瀏覽器，下次就不用重新產生
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
         st.rerun()
 
@@ -52,8 +43,6 @@ USER_IMG_DIR = f"images_{st.session_state.user_id}"
 # 在側邊欄顯示目前狀態
 with st.sidebar:
     st.caption(f"🆔 當前 ID: {st.session_state.user_id}")
-    if st.session_state.user_id.startswith("temp_"):
-        st.warning("⚠️ 瀏覽器同步失敗，資料將無法跨裝置保存。")
 
 
 # --- app.py 中的 CSS 修正 ---
