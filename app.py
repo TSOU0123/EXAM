@@ -7,44 +7,28 @@ import tempfile
 import exam
 import os as os_lib
 
-# --- 1. 頁面設定 ---
+# --- 1. 頁面設定 (必須是第一個 Streamlit 指令) ---
 st.set_page_config(
     page_title="國考字卡練習", 
     layout="centered", 
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. 標題與 CSS 預載 (防止白畫面與重複標題) ---
-# 先定義好標題列樣式，確保問號按鈕正確顯示
-st.markdown("""
-    <style>
-    .mobile-title {
-        font-size: 1.8rem !important;
-        margin: 0 !important;
-        line-height: 2.5rem !important;
-        white-space: nowrap;
-    }
-    div.stButton > button:has(div:contains("❓")) {
-        width: 2.5rem !important;
-        height: 2.5rem !important;
-        border-radius: 50% !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 0 !important;
-        min-width: 2.5rem !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# --- 2. 狀態初始化 (解決 AttributeError 的關鍵：所有變數先定義) ---
+if 'show_help_dialog' not in st.session_state:
+    st.session_state.show_help_dialog = False
+if 'tutorial_auto_triggered' not in st.session_state:
+    st.session_state.tutorial_auto_triggered = False
+if 'uploader_key' not in st.session_state: 
+    st.session_state.uploader_key = 0
+if 'current_idx' not in st.session_state: 
+    st.session_state.current_idx = 0
+if 'flipped' not in st.session_state: 
+    st.session_state.flipped = False
+if 'data' not in st.session_state:
+    st.session_state.data = {"decks": {}, "active": None}
 
-# 這裡是全程式「唯一」繪製頂部標題的地方
-col_head_title, col_help_btn = st.columns([8.5, 1.5])
-with col_head_title:
-    st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
-with col_help_btn:
-    if st.button("❓", help="點擊查看教學"):
-        st.session_state.show_help_dialog = True
-
+# --- 3. 教學視窗定義 (確保在呼叫前已定義) ---
 @st.dialog("🚀 歡迎使用國考字卡練習")
 def show_tutorial():
     st.markdown("""
@@ -60,143 +44,116 @@ def show_tutorial():
     5. **卡片清單**：可以看到目前有的字卡，並切換想刷的題目。
     6. **大量匯入**：同時上傳多組題目與答案 PDF，系統會自動分類並建立不同系列。
                             
-                
-    **目前沒錢買伺服器，試題在重整後會自己消失，重傳就好ㄌ!(也歡迎贊助我喔)**           
+    **目前沒錢買伺服器，試題在重整後會自己消失，重傳就好ㄌ!(也歡迎贊助我喔)**
     
     **祝 金榜題名！**
     """)
     
     if st.button("開始練習！", width='stretch', type="primary"):
-        # 修正這裡的變數名稱，確保與外部一致
         st.session_state.show_help_dialog = False 
         st.session_state.tutorial_auto_triggered = True
         st.rerun()
 
-# 嘗試從瀏覽器讀取舊 ID
+# --- 4. 樣式與標題列 (全程式唯一一次繪製) ---
+st.markdown("""
+    <style>
+    .mobile-title {
+        font-size: 1.8rem !important;
+        margin: 0 !important;
+        line-height: 2.5rem !important;
+    }
+    div.stButton > button:has(div:contains("❓")) {
+        width: 2.5rem !important; height: 2.5rem !important;
+        border-radius: 50% !important;
+        display: flex !important; align-items: center !important; justify-content: center !important;
+        padding: 0 !important; min-width: 2.5rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+col_head_title, col_help_btn = st.columns([8.5, 1.5])
+with col_head_title:
+    st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
+with col_help_btn:
+    if st.button("❓", help="點擊查看教學"):
+        st.session_state.show_help_dialog = True
+
+# --- 這裡新增輔助函數定義 (確保解析邏輯能運作) ---
+
+def save_uploaded_files(uploaded_files):
+    """將上傳的檔案暫存在系統暫存區以供解析"""
+    temp_dir = tempfile.gettempdir()
+    paths = []
+    for uploaded_file in uploaded_files:
+        path = os.path.join(temp_dir, uploaded_file.name)
+        with open(path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        paths.append(path)
+    return paths
+
+def build_series_name(metadata, filename, existing_keys):
+    """根據 Metadata 或檔名建立唯一的題庫名稱"""
+    base_name = metadata.get("deck_name", os.path.splitext(os.path.basename(filename))[0])
+    name = base_name
+    counter = 1
+    # 如果名稱重複，自動加上序號
+    while name in existing_keys:
+        name = f"{base_name} ({counter})"
+        counter += 1
+    return name
+
+def save_data(data):
+    """將最新的題庫資料儲存至使用者的專屬 JSON 檔"""
+    with open(USER_JSON, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        
 js_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
-# 第一階段：確保 Session 隨時都有 ID，防止程式卡死 (白畫面)
 if 'user_id' not in st.session_state:
     if isinstance(js_id, str) and js_id not in ["null", ""]:
-        # A. 如果 JS 跑得快，直接拿回舊 ID
         st.session_state.user_id = js_id
     else:
-        # B. JS 還沒好或新使用者，先隨機生一個「暫時標籤」，讓畫面先跑出來
+        # 先給臨時標籤防止白畫面
         st.session_state.user_id = "loading_" + re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
 
-# 第二階段：背景校正 (核心邏輯：在後台偷偷換回正確的 ID)
+# 背景校正
 if isinstance(js_id, str):
-    # 如果瀏覽器有舊 ID，且目前用的是暫時標籤，則自動切換並重整
     if js_id not in ["null", ""] and st.session_state.user_id != js_id:
         st.session_state.user_id = js_id
-        # 強制清除舊資料快取並重整
-        if 'data' in st.session_state: del st.session_state.data
+        st.session_state.data = None # 強制重新讀取
         st.rerun()
-    # 如果確定是新使用者 (JS 跑完且沒存過 ID)，將目前的暫時標籤「去標籤化」存入瀏覽器
     elif js_id in ["null", ""] and st.session_state.user_id.startswith("loading_"):
         clean_id = st.session_state.user_id.replace("loading_", "")
         st.session_state.user_id = clean_id
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
-        if 'data' in st.session_state: del st.session_state.data
         st.rerun()
 
-# 第 79-80 行
+# 鎖定路徑
 _user_dir = os.path.join("users", st.session_state.user_id)
 os.makedirs(_user_dir, exist_ok=True)
 USER_JSON = os.path.join(_user_dir, "questions.json")
 USER_IMG_DIR = os.path.join(_user_dir, "images")
 
-# --- 第三階段：載入資料 (強化防禦與正確呼叫版) ---
-if 'data' not in st.session_state or st.session_state.data is None:
-    st.session_state.data = {"decks": {}, "active": None}
-    
-    # 只有當 ID 確定且非初始載入狀態，才讀取檔案
-    if not st.session_state.user_id.startswith("loading_"):
-        if os.path.exists(USER_JSON):
-            try:
-                with open(USER_JSON, "r", encoding="utf-8") as f:
-                    d = json.load(f)
-                    if isinstance(d, dict) and "decks" in d:
-                        st.session_state.data = d
-            except Exception:
-                pass
+# --- 6. 載入資料 ---
+if st.session_state.data is None or st.session_state.data == {"decks": {}, "active": None}:
+    if not st.session_state.user_id.startswith("loading_") and os.path.exists(USER_JSON):
+        try:
+            with open(USER_JSON, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, dict) and "decks" in d:
+                    st.session_state.data = d
+        except:
+            st.session_state.data = {"decks": {}, "active": None}
 
-# --- 修正版：正確呼叫教學視窗，移除多餘的重複讀取 ---
+# --- 7. 觸發教學視窗 ---
 if st.session_state.show_help_dialog:
     show_tutorial()
 
-# --- 初始化其他狀態 ---
-if 'uploader_key' not in st.session_state: st.session_state.uploader_key = 0
-if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
-if 'flipped' not in st.session_state: st.session_state.flipped = False
-
-# 新增控制狀態
-if 'show_help_dialog' not in st.session_state:
-    st.session_state.show_help_dialog = False
-if 'tutorial_auto_triggered' not in st.session_state:
-    st.session_state.tutorial_auto_triggered = False
-
-
-
-# --- 2. 修改資料處理函數 ---
-def load_data(): 
-    # 直接在函式內使用全域的 USER_JSON
-    if os.path.exists(USER_JSON):
-        with open(USER_JSON, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict) and "decks" in data:
-            return data
-    return {"decks": {}, "active": None}
-
-def save_data(data): 
-    with open(USER_JSON, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-def build_series_name(metadata, question_path, existing_decks):
-    # 直接使用解析出來的簡潔標題作為系列名稱
-    deck_name = metadata.get("deck_name", "未知題庫").strip()
-    
-    # 如果標題已經存在於清單中，才加上編號區分
-    if deck_name not in existing_decks:
-        return deck_name
-    
-    suffix = 2
-    while True:
-        candidate = f"{deck_name} ({suffix})"
-        if candidate not in existing_decks:
-            return candidate
-        suffix += 1
-
-def find_existing_series(metadata, question_path, existing_decks):
-    # 改為直接比對標題名稱是否已存在
-    deck_name = metadata.get("deck_name", "").strip()
-    if deck_name in existing_decks:
-        return deck_name
-    return None
-
-def normalize_name(name):
-    return re.sub(r"[\W_]+", "", name).lower()
-
-
-def save_uploaded_files(uploaded_files):
-    dest_folder = tempfile.mkdtemp(prefix="streamlit_pdf_")
-    saved_paths = []
-    for uploaded in uploaded_files:
-        safe_path = os.path.join(dest_folder, uploaded.name)
-        with open(safe_path, "wb") as f:
-            f.write(uploaded.getbuffer())
-        saved_paths.append(safe_path)
-    return saved_paths
-
-# --- 取得題庫清單 (安全讀取) ---
+# 取得目前是否有題庫
 series_names = list(st.session_state.data.get("decks", {}).keys())
-
-# 自動教學觸發判斷 (針對新使用者/空題庫)
 if not series_names and not st.session_state.tutorial_auto_triggered:
-    # 只有當 ID 已經校正完畢（非 loading）且真的沒題庫時才自動跳教學
     if not st.session_state.user_id.startswith("loading_"):
         st.session_state.show_help_dialog = True
-        st.session_state.tutorial_auto_triggered = True
     
 active_series = st.session_state.data.get("active")
 
