@@ -1,34 +1,38 @@
 import streamlit as st
-from streamlit_javascript import st_javascript # 新增這一行
+from streamlit_javascript import st_javascript 
 import json
 import os
 import re
 import tempfile
 import exam
+import os as os_lib # 用於產生隨機數
 
+# --- 1. 頁面設定必須放在第一行 ---
+st.set_page_config(
+    page_title="國考字卡練習", 
+    layout="centered", 
+    initial_sidebar_state="collapsed"
+)
 
-# --- 1. 初始化持久化 User ID (修正版：確保不連通且持久化) ---
-
-# 執行 JS 取得瀏覽器存儲的 ID
-# 注意：第一次載入頁面時，stored_id 會是 None
+# --- 2. 唯一 ID 初始化 (確保瀏覽器獨立且持久) ---
+# 取得瀏覽器存儲的 ID
 stored_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
 if 'user_id' not in st.session_state:
     if stored_id is not None and stored_id != "":
-        # A. 如果瀏覽器有舊 ID，就抓回來
+        # A. 成功從瀏覽器讀回舊 ID
         st.session_state.user_id = stored_id
     elif stored_id is None:
-        # B. 如果 JS 還沒回傳（正在載入中），先給一個暫時狀態，避免執行後續邏輯
+        # B. 等待 JavaScript 回傳，先停止執行後續代碼避免產生錯誤 ID
         st.stop() 
     else:
-        # C. 如果瀏覽器確定沒存過 ID (空字串)，才產生新的
-        new_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
+        # C. 確定是新使用者，產生唯一 ID 並存入瀏覽器
+        # 使用 os.urandom 確保隨機性，防止與他人連通
+        new_id = re.sub(r'\W+', '', str(os_lib.urandom(4).hex()))
         st.session_state.user_id = new_id
         st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
 
-# ⚠️ 務必確認：刪除原先第 41~45 行那段重複的「1. 初始化 Session 唯一 ID」！
-
-# 確保路徑與當前唯一 ID 綁定
+# 鎖定該使用者的專屬檔案路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
@@ -38,13 +42,6 @@ st.set_page_config(
     layout="centered", 
     initial_sidebar_state="collapsed"
 )
-
-# 1. 初始化 Session 唯一 ID
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
-
-USER_JSON = f"questions_{st.session_state.user_id}.json"
-USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
 
 # --- app.py 中的 CSS 修正 ---
