@@ -73,72 +73,88 @@ def save_data(data):
         with open(USER_JSON, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-# --- 4. 樣式與標題列 (手機版最終加固版) ---
+# --- 4. 樣式與標題列 (手機容器鎖定版) ---
 st.markdown("""
     <style>
-    /* 1. 徹底隱藏頂部所有狀態欄位，消除空白 */
-    header, [data-testid="stHeader"] {
+    /* 1. 隱藏 Streamlit 所有原生頂部裝飾列 */
+    header, [data-testid="stHeader"], .stAppHeader {
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
     }
-    
-    /* 2. 移除主容器間距，並強行上移 */
+
+    /* 2. 限定內容寬度，讓電腦版看起來也像手機 */
     .main .block-container {
-        padding-top: 0rem !important; 
-        margin-top: -50px !important; /* 加大上移力道消除空白 */
-        padding-bottom: 1rem !important;
+        max-width: 430px !important; /* 標準手機寬度 */
+        margin: auto !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        margin-top: -45px !important; /* 補償消失的 Header 空間 */
+        
+        /* 電腦版增加手機容器感 */
+        background: white;
+        box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        min-height: 100vh;
     }
 
-    /* 3. 強制所有水平區塊 (Columns) 在手機上不換行 */
-    /* 這是防止按鈕垂直堆疊的關鍵 */
+    /* 3. 鎖定全域橫向寬度，防止左右晃動，但允許垂直捲動題目 */
+    html, body {
+        overflow-x: hidden !important;
+        background-color: #f8f9fa; /* 背景設為淺灰，突顯中間的手機容器 */
+    }
+
+    /* 4. 強制標題列與按鈕在窄螢幕下絕對「不換行」 */
     [data-testid="stHorizontalBlock"] {
+        display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        gap: 0.3rem !important; /* 縮減元件間距 */
+        justify-content: space-between !important;
+        gap: 0.3rem !important;
     }
     
-    /* 4. 讓 Column 內的元件不要撐開寬度 */
     [data-testid="column"] {
+        flex: 1 1 0% !important;
         min-width: 0 !important;
-        flex: 1 1 auto !important;
     }
 
-    /* 5. 標題字體與溢出處理 */
+    /* 5. 標題文字溢出處理 */
     .mobile-title {
         font-size: 1.25rem !important;
-        margin: 0 !important;
+        font-weight: 700;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis; /* 太長會變省略號 */
-        font-weight: 700;
+        text-overflow: ellipsis;
+        margin: 0 !important;
     }
 
-    /* 6. 問號按鈕微調 */
+    /* 6. 統一按鈕樣式，確保高度一致防止排版跳動 */
+    div.stButton > button {
+        width: 100% !important;
+        padding: 0.5rem 0.2rem !important;
+        font-size: 0.85rem !important;
+        height: 2.8rem !important;
+    }
+
+    /* 7. 圓形問號按鈕固定大小 */
     div.stButton > button:has(div:contains("❓")) {
-        width: 1.8rem !important; 
-        height: 1.8rem !important;
+        width: 2.2rem !important; 
+        height: 2.2rem !important;
+        min-width: 2.2rem !important;
         border-radius: 50% !important;
         padding: 0 !important;
-        min-width: 1.8rem !important;
-        border: 1px solid #ddd !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
 
-    /* 7. 控制列與導航按鈕字體縮小，適配小螢幕 */
-    div[data-testid="column"] button p {
-        font-size: 0.8rem !important;
-    }
-    
-    /* 隱藏跳轉輸入框的標籤高度 */
-    [data-testid="stTextInput"] label {
-        display: none !important;
-    }
+    /* 8. 隱藏輸入框標籤高度 */
+    [data-testid="stTextInput"] label { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 調整標題列比例，給標題更多空間
-col_head_title, col_help_btn = st.columns([0.9, 0.1])
+# 重新定義標題列比例
+col_head_title, col_help_btn = st.columns([0.86, 0.14])
 with col_head_title:
     st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
 with col_help_btn:
