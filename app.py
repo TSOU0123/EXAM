@@ -1,10 +1,33 @@
-# --- 建議修改後的開頭順序 ---
 import streamlit as st
+from streamlit_javascript import st_javascript # 新增這一行
 import json
 import os
 import re
 import tempfile
 import exam
+
+
+# --- 1. 初始化持久化 User ID (與瀏覽器綁定) ---
+
+# 從瀏覽器的 localStorage 讀取 user_id
+# 如果是第一次使用，這個值會是 None
+stored_id = st_javascript("localStorage.getItem('flashcard_user_id');")
+
+if 'user_id' not in st.session_state:
+    # 這裡加入一個小延遲確保 JavaScript 執行完成
+    if stored_id is None or stored_id == "":
+        # 如果瀏覽器沒存過，才產生新的
+        new_id = re.sub(r'\W+', '', str(os.urandom(4).hex()))
+        st.session_state.user_id = new_id
+        # 將新 ID 存入瀏覽器 localStorage
+        st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
+    else:
+        # 如果瀏覽器有存過，就拿回來用
+        st.session_state.user_id = stored_id
+
+# 確保路徑與當前 ID 綁定
+USER_JSON = f"questions_{st.session_state.user_id}.json"
+USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
 # 先設定頁面，再進行邏輯運算
 st.set_page_config(
@@ -437,16 +460,18 @@ with st.expander("🛠️ 題庫管理與檔案匯入"):
             col_yes, col_no = st.columns(2)
             
             with col_yes:
-                # --- 4. 修改清除邏輯 ---
                 if st.button("🔥 確定，全部刪除", type="primary", width='stretch'):
-                    # 僅刪除該 Session 的檔案與資料夾
+                    # 1. 刪除伺服器檔案
                     if os.path.exists(USER_JSON):
                         os.remove(USER_JSON)
-                    
                     if os.path.exists(USER_IMG_DIR):
                         import shutil
                         shutil.rmtree(USER_IMG_DIR)
                     
+                    # 2. 清除瀏覽器 localStorage 紀錄
+                    st_javascript("localStorage.removeItem('flashcard_user_id');")
+                    
+                    # 3. 重置狀態
                     st.session_state.data = {"decks": {}, "active": None}
                     st.session_state.current_idx = 0
                     st.session_state.flipped = False
