@@ -75,9 +75,11 @@ if isinstance(js_id, str):
         if 'data' in st.session_state: del st.session_state.data
         st.rerun()
 
-# 鎖定專屬路徑
-USER_JSON = f"questions_{st.session_state.user_id}.json"
-USER_IMG_DIR = f"images_{st.session_state.user_id}"
+# 第 79-80 行
+_user_dir = os.path.join("users", st.session_state.user_id)
+os.makedirs(_user_dir, exist_ok=True)
+USER_JSON = os.path.join(_user_dir, "questions.json")
+USER_IMG_DIR = os.path.join(_user_dir, "images")
 
 # 第三階段：載入資料 (修正版：確保 data 隨時存在防止崩潰)
 if 'data' not in st.session_state:
