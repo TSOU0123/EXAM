@@ -14,137 +14,65 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. 靜默初始化標題列 (防止等待時白畫面) ---
-# 預先定義比例，確保畫面不跳動
-col_wait_title, col_wait_help = st.columns([8.5, 1.5])
-with col_wait_title:
-    st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
+# --- 2. 標題與 CSS 預載 (防止白畫面與重複標題) ---
+# 先定義好標題列樣式，確保問號按鈕正確顯示
+st.markdown("""
+    <style>
+    .mobile-title {
+        font-size: 1.8rem !important;
+        margin: 0 !important;
+        line-height: 2.5rem !important;
+        white-space: nowrap;
+    }
+    div.stButton > button:has(div:contains("❓")) {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        min-width: 2.5rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# 嘗試從瀏覽器抓取 ID
+# 這裡是全程式「唯一」繪製頂部標題的地方
+col_head_title, col_help_btn = st.columns([8.5, 1.5])
+with col_head_title:
+    st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
+with col_help_btn:
+    if st.button("❓", help="點擊查看教學"):
+        st.session_state.show_help_dialog = True
+
+# --- 3. 核心：強制對接瀏覽器 ID (解決重整消失問題) ---
 js_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
-# 第一階段：確保 Session 中隨時都有一個可用 ID (防止白畫面)
-if 'user_id' not in st.session_state:
-    # 先隨機生一個臨時 ID，讓程式能先往下執行
-    st.session_state.user_id = "init_" + re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
+# 如果 JS 還在跑 (回傳不是字串)，就停在這裡只顯示標題
+if not isinstance(js_id, str):
+    st.stop()
 
-# 第二階段：背景校正邏輯
-if isinstance(js_id, str):
-    if js_id not in ["null", ""] and st.session_state.user_id != js_id:
-        # A. 回頭客：發現瀏覽器有舊 ID，強制校正並清除「舊 ID 的空資料」快取
+# 走到這代表已經拿到瀏覽器的結果
+if 'user_id' not in st.session_state:
+    if js_id not in ["null", ""]:
         st.session_state.user_id = js_id
-        if 'data' in st.session_state: del st.session_state.data
-        st.rerun() 
-    elif js_id in ["null", ""] and st.session_state.user_id.startswith("init_"):
-        # B. 新使用者：將目前隨機 ID 去掉前綴後存入瀏覽器
-        clean_id = st.session_state.user_id.replace("init_", "")
-        st.session_state.user_id = clean_id
-        st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
-        if 'data' in st.session_state: del st.session_state.data
+    else:
+        new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
+        st.session_state.user_id = new_id
+        st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
         st.rerun()
 
-# 鎖定該使用者的專屬檔案路徑
+# 鎖定路徑並載入資料
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-# 確保資料載入是根據「最終校正後」的 USER_JSON
 if 'data' not in st.session_state:
-    def init_load():
-        if os.path.exists(USER_JSON):
-            with open(USER_JSON, "r", encoding="utf-8") as f:
-                d = json.load(f)
-                return d if isinstance(d, dict) and "decks" in d else {"decks": {}, "active": None}
-        return {"decks": {}, "active": None}
-    
-    st.session_state.data = init_load()
-
-
-# --- app.py 中的 CSS 修正 ---
-st.markdown("""
-    <style>
-    /* 1. 全域禁止選取與長按選單 (排除輸入框) */
-    * {
-        -webkit-user-select: none;
-        user-select: none;
-        -webkit-touch-callout: none; /* 禁用 iOS 放大鏡與選單 */
-    }
-    input, textarea {
-        -webkit-user-select: text !important;
-        user-select: text !important;
-    }
-
-    /* 2. 強制鎖定視窗寬度，移除所有左右邊距 */
-    .main .block-container {
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-        max-width: 100vw !important;
-        overflow-x: hidden !important;
-    }
-
-    /* 3. 強制所有欄位橫向併排，絕對不換行也不產生捲軸 */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        gap: 4px !important; /* 極窄間距 */
-        align-items: center !important;
-    }
-    
-    /* 確保 Column 不會因為內容太寬而撐開 */
-    [data-testid="stColumn"] {
-        min-width: 0px !important;
-        flex: 1 1 auto !important;
-    }
-
-    /* 4. 按鈕樣式：確保文字不換行且填滿格子 */
-    div.stButton > button {
-        width: 100%;
-        border-radius: 8px;
-        padding: 0px 2px !important;
-        white-space: nowrap !important;
-        height: 2.6rem !important;
-    }
-    /* 縮小卡片內部的間距 */
-        .stContainer {
-            padding: 0.8rem !important;
-        }
-        /* 縮小水平分割線的間距 */
-        hr {
-            margin: 0.5rem 0 !important;
-        }
-        /* 讓背面標紅的文字更顯眼 */
-        span[style*="color: #ff4b4b"] {
-            background-color: rgba(255, 75, 75, 0.1);
-            padding: 2px 4px;
-            border-radius: 4px;
-        }
-    .top-header-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 1rem;
-    }
-
-/* 針對手機版縮小標題字體，並讓問號按鈕圓形置中且與標題等高 */
-    @media (max-width: 600px) {
-        .mobile-title {
-            font-size: 1.8rem !important; /* 調整標題大小 */
-            margin: 0 !important;
-            line-height: 2.5rem !important; /* 鎖定行高，用於對齊按鈕 */
-            white-space: nowrap;
-        }
-        /* 🎯 問號按鈕：正圓形、垂直水平置中 🎯 */
-        div.stButton > button:has(div:contains("❓")) {
-            width: 2.5rem !important; /* 寬度與標題行高一致 */
-            height: 2.5rem !important; /* 高度與標題行高一致 */
-            border-radius: 50% !important; /* 強制圓形 */
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: 0 !important;
-            min-width: 2.5rem !important;
-        }
-    }
-    </style>
-""", unsafe_allow_html=True)            
+    if os.path.exists(USER_JSON):
+        with open(USER_JSON, "r", encoding="utf-8") as f:
+            d = json.load(f)
+            st.session_state.data = d if isinstance(d, dict) and "decks" in d else {"decks": {}, "active": None}
+    else:
+        st.session_state.data = {"decks": {}, "active": None}        
 
 if 'uploader_key' not in st.session_state: st.session_state.uploader_key = 0
 if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
@@ -241,17 +169,6 @@ if 'data' not in st.session_state:
 # 取得目前是否有題庫
 series_names = list(st.session_state.data.get("decks", {}).keys())
 
-
-# 使用 [7.5, 2.5] 比例，讓加大的標題有足夠空間，同時按鈕不跑位
-col_head_title, col_help_btn = st.columns([8.5, 1.5])
-
-with col_head_title:
-    # 使用 h2 配合自定義 CSS 類別
-    st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
-
-with col_help_btn:
-    if st.button("❓", help="點擊查看教學"):
-        st.session_state.show_help_dialog = True
 
 # --- 2. 自動教學觸發判斷 (針對新使用者/空題庫) ---
 series_names = list(st.session_state.data.get("decks", {}).keys())
