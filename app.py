@@ -20,34 +20,35 @@ col_wait_title, col_wait_help = st.columns([8.5, 1.5])
 with col_wait_title:
     st.markdown('<h2 class="mobile-title">🗂️ 國考字卡練習</h2>', unsafe_allow_html=True)
 
-# --- 3. 核心：直接抓取瀏覽器 ID (不再使用背景校正) ---
-# 這裡會強制等待直到 js_id 變成字串 (代表瀏覽器已回應)
+# 嘗試從瀏覽器抓取 ID
 js_id = st_javascript("localStorage.getItem('flashcard_user_id');")
 
-# 如果 JS 還在跑 (js_id 為 0 或 None)，就停在這裡，只顯示上面的標題
-if not isinstance(js_id, str):
-    st.stop()
-
-# 走到這代表已經拿到瀏覽器的結果了
+# 第一階段：確保 Session 中隨時都有一個可用 ID (防止白畫面)
 if 'user_id' not in st.session_state:
-    if js_id not in ["null", ""]:
-        # A. 回頭客：直接抓到瀏覽器存的 ID
+    # 先隨機生一個臨時 ID，讓程式能先往下執行
+    st.session_state.user_id = "init_" + re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
+
+# 第二階段：背景校正邏輯
+if isinstance(js_id, str):
+    if js_id not in ["null", ""] and st.session_state.user_id != js_id:
+        # A. 回頭客：發現瀏覽器有舊 ID，強制校正並清除「舊 ID 的空資料」快取
         st.session_state.user_id = js_id
-    else:
-        # B. 新使用者：現場產生 ID 並存入瀏覽器
-        new_id = re.sub(r'\W+', '', str(os_lib.urandom(6).hex()))
-        st.session_state.user_id = new_id
-        st_javascript(f"localStorage.setItem('flashcard_user_id', '{new_id}');")
-        # 存入後立即重整，確保下方的 USER_JSON 能吃到這個新 ID
+        if 'data' in st.session_state: del st.session_state.data
+        st.rerun() 
+    elif js_id in ["null", ""] and st.session_state.user_id.startswith("init_"):
+        # B. 新使用者：將目前隨機 ID 去掉前綴後存入瀏覽器
+        clean_id = st.session_state.user_id.replace("init_", "")
+        st.session_state.user_id = clean_id
+        st_javascript(f"localStorage.setItem('flashcard_user_id', '{clean_id}');")
+        if 'data' in st.session_state: del st.session_state.data
         st.rerun()
 
 # 鎖定該使用者的專屬檔案路徑
 USER_JSON = f"questions_{st.session_state.user_id}.json"
 USER_IMG_DIR = f"images_{st.session_state.user_id}"
 
-# 確保資料載入是根據「最終確定」的 USER_JSON
+# 確保資料載入是根據「最終校正後」的 USER_JSON
 if 'data' not in st.session_state:
-    # 定義載入函數 (確保讀取的是 USER_JSON)
     def init_load():
         if os.path.exists(USER_JSON):
             with open(USER_JSON, "r", encoding="utf-8") as f:
@@ -56,8 +57,6 @@ if 'data' not in st.session_state:
         return {"decks": {}, "active": None}
     
     st.session_state.data = init_load()
-
-# --- 後續 CSS 樣式與功能邏輯 ---
 
 
 # --- app.py 中的 CSS 修正 ---
